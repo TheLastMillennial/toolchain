@@ -118,7 +118,6 @@ NcSprPixelLoop:
     
     ; Destination = DE (Start of the next line)
     ; Count = 320
-    ld   bc, 320
     ldir                    ; High-speed copy of the entire line
     
     ; After LDIR, DE is now at the start of the 3rd row (ready for next loop)
@@ -207,6 +206,108 @@ NcTransRowAdvance:
     pop  iy
     pop  ix
     ret
+	
+;-------------------------------------------------------------------------------
+hdl_ColumnMajor_ScaleHalfResTransparentSpriteFullscreen_NoClip:
+
+gfx_ScaledTransSprite_ColMajor:
+; Draws a 160x120 sprite scaled 2x
+; Input: Sprite Data is ROW-MAJOR (Standard)
+; Output: Draws Vertically (Column-Major)
+; Optimization: Uses IX for Sprite Stride, HL for Screen Stride.
+
+    push ix
+    push iy
+    
+    ; --- Setup ---
+    ld   hl, 9
+    add  hl, sp
+    ld   hl, (hl)           ; HL = Sprite Data Start
+    inc  hl
+    inc  hl                 ; Skip width/height
+    push hl
+    pop  ix                 ; IX = Sprite Pointer (Source)
+    
+    ld   hl, (CurrentBuffer) ; HL = Screen Pointer (Dest)
+    
+    ; Define Constants for Stride
+    ; BC = Sprite Stride (160 bytes to get to next Y pixel)
+    ; DE = Screen Stride (640 bytes to get to next Y block)
+    ld   bc, 160
+    ld   de, 640
+    
+    ; Outer Loop: 160 Columns
+    ld   a, 160
+    ld   iyh, a             ; IYH = Column Counter
+
+.ColLoop:
+    push ix                 ; Save Top of Sprite Column
+    push hl                 ; Save Top of Screen Column
+    
+    ; Inner Loop: 120 Rows
+    ld   a, 120
+    ld   iyl, a             ; IYL = Row Counter
+
+.RowLoop:
+    ld   a, (ix+0)          ; Load Pixel from Sprite
+    
+    ; Advance Sprite Pointer Vertically (Row +1)
+    ; We do this now because IX is not needed for the rest of this iter
+    add  ix, bc             ; IX += 160
+    
+    cp   a, 3               ; Transparent?
+    jr   z, .Skip
+    
+    ; --- Draw 2x2 Block ---
+    ; 1. Draw Top Pair
+    ld   (hl), a            ; Write X
+    inc  hl
+    ld   (hl), a            ; Write X+1
+    
+    ; Move HL to Next Line (Down 1 line, Back 1 pixel)
+    ; Offset: +320 - 1 = +319
+    push bc                 ; Save Sprite Stride (160)
+    ld   bc, 319
+    add  hl, bc
+    
+    ; 2. Draw Bottom Pair
+    ld   (hl), a            ; Write X
+    inc  hl
+    ld   (hl), a            ; Write X+1
+    
+    ; Align HL for next loop (Down 1 line, Back 1 pixel)
+    ; Offset: +319
+    add  hl, bc
+    pop  bc                 ; Restore Sprite Stride (160)
+    
+    dec  iyl
+    jr   nz, .RowLoop
+    jr   .NextCol
+
+.Skip:
+    ; Transparent: Jump Screen Pointer down 2 lines (640 bytes)
+    add  hl, de             ; HL += 640
+    
+    dec  iyl
+    jr   nz, .RowLoop
+
+.NextCol:
+    pop  hl                 ; Restore Screen Top
+    inc  hl
+    inc  hl                 ; Move Screen Right 2 Pixels
+    
+    pop  ix                 ; Restore Sprite Top
+    inc  ix                 ; Move Sprite Right 1 Pixel
+    
+    dec  iyh
+    jr   nz, .ColLoop
+
+    pop  iy
+    pop  ix
+    ret
+	
+;-------------------------------------------------------------------------------
+
 
 ;-------------------------------------------------------------------------------
 ; Inner library routines
