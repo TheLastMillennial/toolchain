@@ -73,7 +73,7 @@ library GRAPHX, 13
 	export gfx_Sprite_NoClip
 	export gfx_TransparentSprite_NoClip
 	export gfx_GetSprite
-	export gfx_ScaledSprite_NoClip
+	export gfx_ScaledSprite_NoClip_2x_At0
 	export gfx_ScaledTransparentSprite_NoClip
 	export gfx_FlipSpriteY
 	export gfx_FlipSpriteX
@@ -2508,185 +2508,163 @@ gfx_GetClipRegion:
 	ret
 
 ;-------------------------------------------------------------------------------
-gfx_ScaledSprite_NoClip:
-; Draws a scaled sprite to the screen
-; Arguments:
-;  arg0 : Pointer to sprite
-;  arg1 : X coordinate
-;  arg2 : Y coordinate
-;  arg5 : Width Scale (integer)
-;  arg6 : Height Scale (integer)
-; Returns:
-;  None
-	ld	iy, 0
-	add	iy, sp
-	push	ix
-	ld	h, ti.lcdWidth / 2
-	ld	l, (iy + 15)		; height of scale
-	ld	a, l
-	ld	(NcSprHscl+1), a
-	mlt	hl
-	add	hl, hl
-	ld	(NcSprHscl320+1), hl
-	ld	de, (iy + 6)		; x coordinate
-	ld	c, (iy + 9)		; y coordinate
-	ld	a, (iy + 12)		; width of scale
-	ld	h, a
-	ld	ixl, a
-	ld	iy, (iy + 3)		; start of sprite structure
-	ld	l, (iy + 0)
-	ld	a, l
-	ld	(NcSprWidth+1), a
-	mlt	hl
-	ld	(SprWxSclW1+1), hl
-	ld	(SprWxSclW2+1), hl
-	ld	a, (iy + 1)
-	ld	ixh, a			; height of sprite
-	ld	hl, (CurrentBuffer)
-	add	hl, de
-	inc	hl
-	ld	b, ti.lcdWidth / 2
-	mlt	bc
-	add	hl, bc
-	call	gfx_Wait
-NcSprBigLoop:
-	add	hl, bc
-	ex	de, hl
-	sbc	hl, hl
-	ld	b, l
-	add	hl, de
-	dec	hl
-	push	de
-NcSprWidth:
-	ld	a, 0			; width of sprite
-	jr	NcSprLpEntry
-NcSprWlp:
-	ldir
-NcSprLpEntry:
-	ld	c, (iy + 2)
-	inc	iy
-	ld	(hl), c
-	ld	c, ixl			; width of scale
-	dec	a
-	jr	nz, NcSprWlp
-	dec	c
-	jr	z, NcSprHscl
-	ldir
-NcSprHscl:
-	ld	a, 0			; height of scale
-	dec	a
-	jr	z, NcSprW_end
-	inc	b
-	ld	c, $40			; bc = ti.lcdWidth
-NcSprLineCopy:
-	add	hl, bc
-	dec	de
-	ex	de, hl
-SprWxSclW1:
-	ld	bc, 0			; widthSprite x widthScale
-	lddr
-	dec	a
-	jr	z, NcSprW_end
-	ld	bc, 641
-	add	hl, bc
-	inc	de
-	ex	de, hl
-SprWxSclW2:
-	ld	bc, 0			; widthSprite x widthScale
-	ldir
-	ld	bc, 639
-	dec	a
-	jr	nz, NcSprLineCopy
-NcSprW_end:
-	pop	hl
-NcSprHscl320:
-	ld	bc, 0			; ti.lcdWidth x heightScale
-	dec	ixh
-	jr	nz, NcSprBigLoop
-	pop	ix			; restore ix sp
-	ret
+gfx_ScaledSprite_NoClip_2x_At0:
+; Draws a 160x120 sprite scaled 2x to 320x240 at (0,0)
+; Optimized for speed and stability.
 
+    push ix                 ; Preserve IX
+    ld   iy, 0
+    add  iy, sp
+    
+    ; --- Setup Source and Destination ---
+    ld   hl, (iy + 6)       ; Get sprite pointer (Arg0)
+    inc  hl                 ; Skip width byte
+    inc  hl                 ; Skip height byte
+    
+    ld   de, (CurrentBuffer) ; DE = Top-left of screen (X=0, Y=0)
+    
+    ; We use IXL as our row counter (120 rows)
+    ld   a, 120
+    ld   ixl, a
+
+NcSprRowLoop:
+    ; --- Horizontal Scale (160 -> 320 pixels) ---
+    ; We process 160 pixels. Unrolled 4x to reduce branch overhead.
+    ld   b, 40              ; 40 * 4 = 160 pixels
+NcSprPixelLoop:
+    repeat 4
+        ld   a, (hl)        ; Load 1 pixel
+        inc  hl             ; Next source pixel
+        ld   (de), a        ; Write pixel once
+        inc  de
+        ld   (de), a        ; Write pixel twice
+        inc  de
+    end repeat
+    djnz NcSprPixelLoop
+
+    ; --- Vertical Scale (Line Copy) ---
+    ; At this point, HL is at the start of the NEXT sprite row.
+    ; DE is at the start of the NEXT screen row.
+    ; We need to copy the 320 bytes we just wrote to the current screen row.
+    
+    push hl                 ; Save sprite pointer
+    
+    ; Source for copy = Current DE - 320 bytes
+    push de
+    pop  hl                 
+    ld   bc, 320
+    or   a
+    sbc  hl, bc             ; HL = Start of the line we just finished
+    
+    ; Destination = DE (Start of the next line)
+    ; Count = 320
+    ld   bc, 320
+    ldir                    ; High-speed copy of the entire line
+    
+    ; After LDIR, DE is now at the start of the 3rd row (ready for next loop)
+    pop  hl                 ; Restore sprite pointer
+    
+    dec  ixl
+    jr   nz, NcSprRowLoop
+
+    pop  ix                 ; Restore IX
+    ret
+	
+	
 ;-------------------------------------------------------------------------------
 gfx_ScaledTransparentSprite_NoClip:
-; Draws a scaled sprite to the screen with transparency
-; Arguments:
-;  arg0 : Pointer to sprite structure
-;  arg1 : X coordinate
-;  arg2 : Y coordinate
-;  arg5 : Width Scale (integer)
-;  arg6 : Height Scale (integer)
-; Returns:
-;  None
-	ld	iy, 0
-	add	iy, sp
-	ld	hl, (iy + 6)		; hl = x coordinate
-	ld	c, (iy + 9)		; c = y coordniate
-	ld	de, (CurrentBuffer)
-	add	hl, de
-	ld	b, ti.lcdWidth / 2
-	mlt	bc
-	add	hl, bc
-	add	hl, bc
-	ex	de, hl			; de -> start draw location
-	ld	hl, ti.lcdWidth
-	ld	a, (iy + 15)
-	ld	(.heightscale), a
-	ld	a, (iy + 12)
-	ld	(.widthscale), a	; smc faster inner loop
-	ld	iy, (iy + 3)		; iy -> start of sprite struct
-	ld	c, (iy + 0)		; c = width
-	ld	b, a
-	ld	a, c
-	mlt	bc
-	sbc	hl, bc			; find x offset next
-	ld	(.amount), hl
-	ld	(.width), a
-	ld	a, (iy + 1)
-	lea	hl, iy + 2		; hl -> sprite data
-	push	ix			; save ix sp
-	ld	ixh, a			; ixh = height
-	call	gfx_Wait
-.loop:
-	ld	ixl, 0			; ixl = height scale
-.heightscale := $-1
-.loopheight:
-	push	hl
-	ld	c, 0
-.width := $-1
-.loopwidth:
-	ld	b, 0
-.widthscale := $-1
-	ld	a, (hl)			; get sprite pixel
-	cp	a, TRASPARENT_COLOR
-smcByte _TransparentColor
-	jr	nz, .next		; is transparent?
-.skip:
-	inc	de
-	djnz	.skip
-	jr	.locate			; loop for next pixel
-.next:
-	ld	(de), a
-	inc	de
-	djnz	.next			; set and loop for next pixel
-.locate:
-	inc	hl
-	dec	c
-	jr	nz, .loopwidth		; loop for width
-	ex	de, hl
-	ld	iy, 0
-	add	iy, de			; save hl
-	ld	bc, 0
-.amount := $-3
-	add	hl, bc			; get next draw location
-	ex	de, hl
-	pop	hl
-	dec	ixl			; loop height scale
-	jr	nz, .loopheight
-	lea	hl, iy			; restore hl
-	dec	ixh			; loop height
-	jr	nz, .loop
-	pop	ix			; restore ix sp
-	ret
+; Draws a 160x120 sprite scaled 2x with transparency (Color 3)
+; Column-major traversal: process one source column top-to-bottom
+; Hardcoded: X=0, Y=0, Scale=2x
+.assume adl=1
+    push ix
+    push iy
+
+    ; --- Setup Source Pointer ---
+    ld   hl, 9
+    add  hl, sp
+    ld   hl, (hl)           ; HL = Sprite structure
+    inc  hl                ; skip width
+    inc  hl                ; skip height
+    ; HL now points to pixel (0,0)
+
+    ; --- Setup Destination Base ---
+    ld   de, (CurrentBuffer)   ; DE = start of top-left pixel
+
+    ; Outer loop: 160 source columns
+    ld   a, 160
+    ld   ixl, a              ; column counter
+
+NcTransColLoop:
+
+    ; For each column:
+    ; DE = start of output column (top of column)
+    ; IY = second scaled column (DE + 1)
+
+    push de
+    pop  iy
+    inc  iy                 ; IY = DE + 1 (second column of 2x)
+
+    ; Inner loop: 120 source rows
+    ld   b, 120
+
+    ; Save HL for this column start
+    push hl
+
+NcTransColPixelLoop:
+    ld   a, (hl)            ; load source pixel
+    cp   a, 3
+    jr   z, NcTransColSkip
+
+    ; Write 2x2 vertical block:
+    ; Row 1
+    ld   (de), a
+    ld   (iy), a
+
+    ; Move down one row (320 bytes)
+    ld   bc, 320
+    add  de, bc
+    add  iy, bc
+
+    ; Row 2
+    ld   (de), a
+    ld   (iy), a
+
+    ; Move down to next output row pair
+    add  de, bc
+    add  iy, bc
+
+    jr   NcTransColNext
+
+NcTransColSkip:
+    ; Transparent: skip 2 output rows (each row = 320 bytes)
+    ld   bc, 640            ; 2 * 320
+    add  de, bc
+    add  iy, bc
+
+NcTransColNext:
+    ; Advance source down one row: HL += 160 (one full source row)
+    ld   bc, 160
+    add  hl, bc
+
+    djnz NcTransColPixelLoop
+
+    ; Restore HL to top of this column
+    pop  hl
+
+    ; Advance HL to next source column
+    inc  hl                ; next column in row 0
+
+    ; Advance DE to next output column pair (skip 2 pixels right)
+    inc  de
+    inc  de
+
+    dec  ixl
+    jr   nz, NcTransColLoop
+
+    pop  iy
+    pop  ix
+    ret
 
 ;-------------------------------------------------------------------------------
 gfx_TransparentSprite:

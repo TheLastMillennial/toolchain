@@ -1358,11 +1358,7 @@ gfx_sprite_t *gfx_GetSprite(gfx_sprite_t *sprite_buffer, int x, int y);
  * @param[in] height_scale Height scaling factor.
  * @note Usable with gfx_GetSprite in order to create clipped versions.
  */
-void gfx_ScaledSprite_NoClip(const gfx_sprite_t *sprite,
-                             uint24_t x,
-                             uint8_t y,
-                             uint8_t width_scale,
-                             uint8_t height_scale);
+void gfx_ScaledSprite_NoClip_2x_At0(const gfx_sprite_t *sprite);
 
 /**
  * Scales an unclipped transparent sprite.
@@ -1377,11 +1373,7 @@ void gfx_ScaledSprite_NoClip(const gfx_sprite_t *sprite,
  * @param[in] height_scale Height scaling factor.
  * @note Usable with gfx_GetSprite in order to create clipped versions.
  */
-void gfx_ScaledTransparentSprite_NoClip(const gfx_sprite_t *sprite,
-                                        uint24_t x,
-                                        uint8_t y,
-                                        uint8_t width_scale,
-                                        uint8_t height_scale);
+void gfx_ScaledTransparentSprite_NoClip(const gfx_sprite_t *sprite);
 
 /**
  * Fixed Rotation with scaling factor for an unclipped sprite.
