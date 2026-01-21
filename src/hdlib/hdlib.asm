@@ -70,7 +70,7 @@ end macro
 ;-------------------------------------------------------------------------------
 hdl_ScaleHalfResSpriteFullscreen_NoClip:
 ; Draws a 160x120 sprite scaled 2x to 320x240 at (0,0)
-; Optimized for speed and stability.
+; Optimized for speed.
 
     push ix                 ; Preserve IX
     ld   iy, 0
@@ -133,7 +133,7 @@ NcSprPixelLoop:
 	
 ;-------------------------------------------------------------------------------
 hdl_ScaleHalfResTransparentSpriteFullscreen_NoClip:
-; Draws a 160x120 sprite scaled 2x with transparency (Color 3)
+; Draws a 160x120 sprite scaled 2x with transparency
 ; Hardcoded: X=0, Y=0, Scale=2x
 ; Optimized: Dual-row writing, no EXX, safe for stack.
 
@@ -164,7 +164,7 @@ NcTransPixelLoop:
     ld   a, (hl)            ; 1. Load pixel
     inc  hl
     
-    cp   a, 3               ; 2. Check transparency (Hardcoded to 3)
+    cp   a, TRASPARENT_COLOR; 2. Check transparency
     jr   z, NcTransSkip     ; If transparent, just move pointers
     
     ; 3. Not Transparent: Write 2x2 block
